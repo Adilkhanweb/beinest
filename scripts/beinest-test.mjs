@@ -37,7 +37,7 @@ try{
   for(const id of ['sheet-width','sheet-height','spacing','margin','rotation','allow-holes'])assert.equal(await page.locator('#'+id).evaluate(el=>!!el.closest('#advanced-parameters')),false,id+' is an everyday control');
   for(const id of ['parameter-preset','material-presets','save-parameter-preset'])assert.equal(await page.locator('#'+id).evaluate(el=>!!el.closest('#settings-content')&&!el.closest('#advanced-parameters')),true,id+' is at the top level, outside advanced');
   assert.equal(await page.locator('#parameter-preset').evaluate(el=>el.tagName),'SECTION');assert.equal(await page.locator('#apply-parameter-preset,#delete-parameter-preset').count(),0,'Single manager replaces the legacy select/action cluster');
-  await settings();const emptyChart=await chart();
+  await settings();await page.locator('#time-unlimited').uncheck();const emptyChart=await chart();
   await page.locator('#time-output').fill('300');assert.equal(await page.locator('#time-budget').inputValue(),'300');
   await page.locator('#time-budget').fill('1');assert.equal(await page.locator('#time-output').inputValue(),'1');
   await page.locator('#time-budget').fill('67');assert.equal(await page.locator('#time-output').inputValue(),'67');
@@ -64,7 +64,7 @@ try{
   await page.locator('#select-all-parts').check();await page.locator('#delete-selected-parts').click();assert.equal(await page.locator('.part-row').count(),0);assert.equal(await page.locator('.nest-shape').count(),0);assert.equal(await page.locator('.sheet-card').count(),0);assert.equal(await page.locator('#canvas-dropzone').isVisible(),true);assert.equal(await page.locator('#stat-total').textContent(),'0');assert.equal(await page.locator('#select-all-parts').isDisabled(),true);results.importSelectAllDelete=true;
 
   await importFixture();await page.locator('[data-quantity]').evaluateAll(els=>els.forEach(el=>{el.value='6';el.dispatchEvent(new Event('change',{bubbles:true}));}));
-  await settings();await page.locator('#sheet-width').fill('600');await page.locator('#sheet-height').fill('400');await page.locator('#time-budget').fill('6');
+  await settings();await page.locator('#sheet-width').fill('600');await page.locator('#sheet-height').fill('400');await page.locator('#time-unlimited').uncheck();await page.locator('#time-budget').fill('6');
   // Observe actual gallery DOM replacements during running, not a mocked callback
   // or the pre-existing committed layout. Worker snapshots can arrive slowly.
   await page.evaluate(()=>{window.liveSnapshots=[];window.liveObserver=new MutationObserver(()=>{if(document.body.classList.contains('is-running')&&document.querySelector('.nest-shape'))window.liveSnapshots.push({at:performance.now(),count:document.querySelectorAll('.nest-shape').length,status:document.querySelector('#layout-status').textContent});});window.liveObserver.observe(document.querySelector('#sheets-gallery'),{childList:true});});

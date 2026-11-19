@@ -62,7 +62,7 @@ try{
   });
   const svg='<svg xmlns="http://www.w3.org/2000/svg" width="50mm" height="40mm" viewBox="0 0 50 40"><path fill="#fff" d="M0 0H50V40H0Z"/></svg>';
   await page.locator('#parts-tab').click();await page.locator('#file-input').setInputFiles({name:'stop-white.svg',mimeType:'image/svg+xml',buffer:Buffer.from(svg)});await page.waitForFunction(()=>document.querySelectorAll('.part-row').length===1);
-  await page.locator('#settings-tab').click();await page.locator('#advanced-parameters').evaluate(e=>e.open=true);await page.locator('#time-output').fill('30');
+  await page.locator('#settings-tab').click();await page.locator('#advanced-parameters').evaluate(e=>e.open=true);await page.locator('#time-unlimited').uncheck();await page.locator('#time-output').fill('30');
   report.coldImmediate=await startImmediateStop();assert.equal(await page.locator('.sheet-card').count(),0);assert.equal(await page.locator('.import-preview-svg .nest-shape').count(),1,'No optimizer callback preserves genuine source preview');assert.equal(await page.locator('#export-button').isDisabled(),true);assert.equal((await saved())?.result??null,null);
   const first=await liveStop(2);report.firstEverLiveStop=true;
   report.warmImmediate=await startImmediateStop();assert.deepEqual(await ui(),first.view,'No callback keeps previous committed result');assert.deepEqual(await saved(),first.project,'No callback does not overwrite previous auto-save');

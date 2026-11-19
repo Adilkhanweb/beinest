@@ -4,6 +4,6 @@
   "private": true,
   "type": "module",
   "description": "beinest — a local-first sheet nesting workspace powered by Nestbolt",
-  "scripts": { "dev": "node scripts/serve.mjs", "start": "node scripts/serve.mjs", "test": "node scripts/test.mjs" },
+  "scripts": { "dev": "node scripts/serve.mjs", "start": "node scripts/serve.mjs", "test": "node --test scripts/search-policy.test.mjs && node scripts/test.mjs" },
   "devDependencies": { "playwright-core": "1.56.1" }
 }

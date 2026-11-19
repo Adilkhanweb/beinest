@@ -144,7 +144,7 @@ try{
     await white.locator('[data-quantity]').fill('2');await white.locator('[data-quantity]').dispatchEvent('change');
     await blue.locator('[data-quantity]').fill('1');await blue.locator('[data-quantity]').dispatchEvent('change');
     await white.locator('.part-main').click();
-    await settings();await page.locator('#sheet-width').fill('200');await page.locator('#sheet-height').fill('150');await page.locator('#time-output').fill('3');
+    await settings();await page.locator('#sheet-width').fill('200');await page.locator('#sheet-height').fill('150');await page.locator('#time-unlimited').uncheck();await page.locator('#time-output').fill('3');
     await page.locator('#run-button').click();await page.waitForFunction(()=>document.body.classList.contains('is-running'));
     assert.equal(await white.locator('.part-select').isDisabled(),true);
     assert.equal(await white.locator('.part-main').isDisabled(),true);

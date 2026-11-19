@@ -141,7 +141,7 @@ export async function runCombinedExportRegression(){
     await page.locator('[data-quantity]').fill('2');await page.locator('[data-quantity]').dispatchEvent('change');
     await page.locator('#settings-tab').click();
     await page.locator('#sheet-width').fill('120');await page.locator('#sheet-height').fill('100');
-    await page.locator('#advanced-parameters').evaluate(el=>el.open=true);await page.locator('#time-output').fill('1');
+    await page.locator('#advanced-parameters').evaluate(el=>el.open=true);await page.locator('#time-unlimited').uncheck();await page.locator('#time-output').fill('1');
     await page.locator('#run-button').click();
     await page.waitForFunction(()=>document.body.classList.contains('is-running'));
     await page.waitForFunction(()=>!document.body.classList.contains('is-running')&&!document.body.classList.contains('is-stopping'),null,{timeout:90000});

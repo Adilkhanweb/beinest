@@ -13,6 +13,7 @@ async function run(){await page.locator('#run-button').click();await page.waitFo
 try{
   await page.goto(process.env.TEST_URL||`http://127.0.0.1:${process.env.TEST_PORT||4175}`,{waitUntil:'networkidle'});
   assert.equal(await page.locator('.nest-shape').count(),0);assert.equal(await page.locator('.part-row').count(),0);assert.equal(await page.locator('#advanced-parameters').getAttribute('open'),null);await page.locator('#advanced-parameters > summary').click();
+  await page.locator('#time-unlimited').uncheck();await page.locator('#edge-unlinked').uncheck();
   await page.locator('#time-output').fill('300');assert.equal(await page.locator('#time-budget').inputValue(),'300');
   await page.locator('#time-budget').fill('7');assert.equal(await page.locator('#time-output').inputValue(),'7');results.time300AndBidirectional=true;
   const chartBefore=await page.locator('#progress-chart').innerHTML();await page.locator('#time-budget').fill('120');assert.equal(await page.locator('#progress-chart').innerHTML(),chartBefore);results.emptyChartStable=true;

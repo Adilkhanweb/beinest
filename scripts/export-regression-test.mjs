@@ -73,6 +73,7 @@ else{
     assert.equal(await page.locator('#settings-content').evaluate(el=>el.firstElementChild.contains(document.querySelector('#parameter-preset'))),true,'Presets are the first settings section');
     const tag=page.locator('#toggle-labels');assert.equal((await tag.textContent()).trim(),'','Tag toggle is icon-only');assert.equal(await tag.locator('[data-icon="tag"]').count(),1);assert.ok(await tag.getAttribute('aria-label')||await tag.getAttribute('title'));
     await page.locator('#advanced-parameters > summary').click();
+    await page.locator('#time-unlimited').uncheck();
     assert.equal(await page.locator('#time-output').getAttribute('type'),'number');
     for(const value of ['1','300','67']){await page.locator('#time-output').fill(value);assert.equal(await page.locator('#time-budget').inputValue(),value);}
     for(const value of ['0','301','1.5','']){await page.locator('#time-output').fill(value);assert.equal(await page.locator('#time-output').getAttribute('aria-invalid'),'true');assert.equal(await page.locator('#time-budget').inputValue(),'67');}

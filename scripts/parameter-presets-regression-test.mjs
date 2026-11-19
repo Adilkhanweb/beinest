@@ -25,7 +25,7 @@ try {
   const initial = await capture(page), defaults = await read(page);
   assert.equal(defaults.items.length, 4); assert.ok(defaults.items.every(item => Object.keys(item.settings).length === Object.keys(initial).length));
   assert.equal(await page.locator('select#parameter-preset,#apply-parameter-preset,#delete-parameter-preset').count(), 0);
-  assert.equal(await page.locator('#settings-content > :first-child').getAttribute('id'), 'parameter-preset');
+  assert.equal(await page.locator('#settings-content > :first-child #parameter-preset').count(), 1);
   assert.equal(await page.locator('#save-parameter-preset').isVisible(), false);
   await page.locator('#spacing').fill('7.25');
   assert.equal(await page.locator('#save-parameter-preset').isVisible(), true);
@@ -38,7 +38,7 @@ try {
   await page.locator('#parameter-preset-name').fill('Complete parameters');
   await page.locator('#preset-sheet-width').fill('850'); await page.locator('#preset-sheet-height').fill('650');
   await page.locator('#preset-spacing').fill('4.75'); await page.locator('#preset-margin').fill('9');
-  await page.locator('#preset-rotation').selectOption('free'); await page.locator('#preset-time-budget').fill('73');
+  await page.locator('#preset-rotation').selectOption('free'); await page.locator('#preset-time-unlimited').uncheck(); await page.locator('#preset-time-budget').fill('73');
   await page.locator('#preset-edge-unlinked').check(); await page.locator('#preset-edge-spacing').fill('13');
   await page.locator('#preset-allow-mirror').check(); await page.locator('#preset-sheet-count').fill('12');
   await page.locator('#preset-nest-mode').selectOption('fill_area'); await page.locator('#preset-run-seed').fill('987');
@@ -55,6 +55,7 @@ try {
   await page.locator(`[data-preset="${record.id}"]`).click();
   assert.deepEqual(await capture(page), record.settings, 'Applying restores every captured field, including hidden/disabled fields');
   assert.equal(await page.locator('#time-output').inputValue(), '73');
+  assert.equal(await page.locator('#time-unlimited').isChecked(), false);
   assert.equal(await page.locator('#preset-allow-holes').count(), 0, 'Editor closes on apply');
   await page.evaluate(() => document.getElementById('settings-content').nestboltSettings.apply({ 'time-budget': '74', 'lead-in-length': '8' }));
   assert.equal(await page.locator('#save-parameter-preset').isVisible(), true);

@@ -5,6 +5,7 @@ import { setupSettings } from './settings.js';
 import { readOriginalPaints, attachOriginalPaints } from './original-colors.js';
 import { setupI18n, formatDuration, formatElapsed } from './i18n.js';
 import { combineSheetSvgs, combinedExportFilename } from './export-files.js';
+import { confirmStagnation, createImprovementTracker } from './search-policy.js';
 
 const $ = (id) => document.getElementById(id);
 const icons = {
@@ -183,6 +184,10 @@ function setRunning(running) {
   $('chart-mode-label').textContent=running?'В процессе':state.result?'Завершено':'Предпросмотр';
 }
 let activeRun=null;
+async function validateCandidate(context,item){
+  try{item.validation=await state.engine.validate(state.library,context.request,item.layout);if(item.validation?.valid){context.validated=item;context.auto?.consider(item,performance.now());}}
+  catch{item.validation=null;}
+}
 // Validate live snapshots outside the search worker. Coalesce waiting snapshots:
 // only one validation is in flight and the newest pending one replaces older work.
 function validateLiveCandidate(context,candidate){
@@ -191,12 +196,11 @@ function validateLiveCandidate(context,candidate){
   context.validationTask=(async()=>{
     while(context.pending&&!context.closed){
       const item=context.pending;context.pending=null;
-      try{item.validation=await state.engine.validate(state.library,context.request,item.layout);if(item.validation?.valid)context.validated=item;}
-      catch{item.validation=null;}
+      await validateCandidate(context,item);
     }
   })().finally(()=>{context.validationTask=null;if(context.pending&&!context.closed)validateLiveCandidate(context,context.pending);});
 }
-async function stopNesting(){
+async function stopNesting(reason='manual'){
   const context=activeRun,token=++state.runToken;
   const elapsed=context?(performance.now()-context.start)/1000:0;
   if(context){context.closed=true;context.pending=null;}
@@ -205,14 +209,17 @@ async function stopNesting(){
   $('run-button-label').textContent='Проверяем последнюю раскладку…';
   let kept=false;
   try{
-    if(context?.latest){
+    if(context?.latest && reason!=='stagnation'){
       await context.validationTask;
       const latest=context.latest;
       if(latest.validation===undefined){try{latest.validation=await state.engine.validate(state.library,context.request,latest.layout);}catch{latest.validation=null;}}
-      const candidate=latest.validation?.valid?latest:context.validated;
+    }
+    if(context){
+      if(context.latest?.validation?.valid)context.auto?.consider(context.latest,performance.now());
+      const candidate=context.auto ? context.auto.best : context.latest?.validation?.valid ? context.latest : context.validated;
       if(token!==state.runToken)return;
       if(candidate?.validation?.valid){
-        state.result={layout:candidate.layout,validation:candidate.validation,...context.options,seconds:elapsed,studio_iterations:candidate.iteration,studio_elapsed:elapsed,studio_stopped:true};
+        state.result={layout:candidate.layout,validation:candidate.validation,...context.options,seconds:elapsed,studio_iterations:candidate.iteration,studio_elapsed:elapsed,studio_stopped:true,studio_stop_reason:reason};
         state.request=context.request;state.chartSeconds=Math.max(.001,elapsed);
         state.history=state.history.filter(point=>point.iteration===undefined||point.iteration<=candidate.iteration);
         const metrics=candidate.validation.metrics,sheetArea=context.request.sheets[0].width_mm*context.request.sheets[0].height_mm;
@@ -221,11 +228,24 @@ async function stopNesting(){
       }
     }
     if(!kept&&context){state.history=context.previous.history;state.chartSeconds=context.previous.chartSeconds;}
-    if(kept) $('chart-caption').textContent='Последняя успешная итерация сохранена';
+    if(kept) $('chart-caption').textContent=reason==='stagnation'?'Нет улучшений — лучшая раскладка сохранена':context.auto?'Лучшая раскладка сохранена':'Последняя успешная итерация сохранена';
     else $('chart-caption').textContent=state.result?'Новая успешная итерация не получена. Предыдущий результат сохранён.':'Успешная итерация ещё не получена';
   }finally{
-    if(token===state.runToken){state.liveLayout=null;state.liveRequest=null;activeRun=null;state.stopping=false;document.body.classList.remove('is-stopping');setRunning(false);$('run-button').disabled=false;renderCanvas();updateMetrics();drawChart();const saved=!kept||saveProject();toast(kept?(saved?'Расчёт остановлен. Последняя успешная итерация сохранена.':'Итерация сохранена в рабочей области, но не в списке проектов.'):state.result?'Расчёт остановлен. Предыдущий результат сохранён.':'Расчёт остановлен. Успешная итерация ещё не получена.');}
+    if(token===state.runToken){state.liveLayout=null;state.liveRequest=null;activeRun=null;state.stopping=false;document.body.classList.remove('is-stopping');setRunning(false);$('run-button').disabled=false;renderCanvas();updateMetrics();drawChart();const saved=!kept||saveProject();toast(kept?(saved?(context.auto?$('chart-caption').textContent:'Расчёт остановлен. Последняя успешная итерация сохранена.'):'Итерация сохранена в рабочей области, но не в списке проектов.'):state.result?'Расчёт остановлен. Предыдущий результат сохранён.':'Расчёт остановлен. Успешная итерация ещё не получена.');}
   }
+}
+async function checkSearchStagnation(context, now){
+  if(!context.auto.stalled(now)||context.checkingStall)return;
+  context.checkingStall=true;
+  const active=()=>context.token===state.runToken;
+  const stalled=await confirmStagnation(context.auto,{
+    queued:context.validationTask, latest:()=>context.latest, active,
+    now:()=>performance.now(), validate:item=>validateCandidate(context,item),
+  });
+  if(!active())return;
+  if(stalled){await stopNesting('stagnation');return;}
+  context.checkingStall=false;
+  if(context.latest && context.latest.validation===undefined)validateLiveCandidate(context,context.latest);
 }
 async function runNesting() {
   if(state.exporting||state.stopping||state.importing)return;
@@ -237,10 +257,38 @@ async function runNesting() {
     await state.engineReady;if(token!==state.runToken)return;
     if(state.library===null)throw new Error('Добавьте детали для раскроя.');
     const request=buildRequest(),options=settings.runOptions(),start=performance.now();
-    const context={token,request,options,start,previous:{history:state.history,chartSeconds:state.chartSeconds},latest:null,validated:null,pending:null,closed:false,validationTask:null};activeRun=context;
+    const auto=options.unlimited?createImprovementTracker(request.mode):null;
+    const context={token,request,options,start,auto,previous:{history:state.history,chartSeconds:state.chartSeconds},latest:null,validated:null,pending:null,closed:false,validationTask:null};activeRun=context;
     state.liveRequest=request;state.liveLayout=emptyLayout();state.iteration=0;state.selected=null;state.history=[];state.chartSeconds=seconds;renderCanvas();updateMetrics();drawChart();$('run-progress-label').textContent='Ищем лучший раскрой…';
-    progressTimer=setInterval(()=>{const elapsed=(performance.now()-start)/1000,p=Math.min(97,elapsed/seconds*100);$('run-percentage').textContent=Math.round(p)+'%';$('optimization-progress').value=p;$('stat-time').textContent=formatElapsed(elapsed);},160);
-    const result=await state.engine.run(state.library,request,{seconds,...options,live:0.1,onProgress:p=>{if(token!==state.runToken||!p.layout?.sheets?.length||!p.layout.placements?.length)return;const placed=p.layout.placements.reduce((sum,placement)=>sum+(state.library.parts.find(part=>part.id===placement.part_id)?.area_mm2||0),0),sheetArea=request.sheets[0].width_mm*request.sheets[0].height_mm;const utilization=Math.min(100,100*placed/(p.layout.sheets.length*sheetArea));state.iteration++;state.history.push({t:p.t||0,utilization,iteration:state.iteration});context.latest={layout:p.layout,iteration:state.iteration};validateLiveCandidate(context,context.latest);state.liveLayout=p.layout;state.selected=null;renderCanvas();updateMetrics();drawChart();}});
+    if(auto) {$('optimization-progress').removeAttribute('value');$('run-percentage').textContent='';}
+    progressTimer=setInterval(()=>{
+      const now=performance.now(),elapsed=(now-start)/1000;
+      if(auto){$('run-percentage').textContent=formatElapsed(elapsed);void checkSearchStagnation(context,now);}
+      else {const p=Math.min(97,elapsed/seconds*100);$('run-percentage').textContent=Math.round(p)+'%';$('optimization-progress').value=p;}
+      $('stat-time').textContent=formatElapsed(elapsed);
+    },160);
+    const onProgress=p=>{
+      if(token!==state.runToken||!p.layout?.sheets?.length||!p.layout.placements?.length)return;
+      const placed=p.layout.placements.reduce((sum,placement)=>sum+(state.library.parts.find(part=>part.id===placement.part_id)?.area_mm2||0),0),sheetArea=request.sheets[0].width_mm*request.sheets[0].height_mm;
+      const utilization=Math.min(100,100*placed/(p.layout.sheets.length*sheetArea)),t=auto?(performance.now()-start)/1000:p.t||0;
+      if(auto)state.chartSeconds=Math.max(1,t);
+      state.iteration++;state.history.push({t,utilization,iteration:state.iteration});context.latest={layout:p.layout,iteration:state.iteration};if(!context.checkingStall)validateLiveCandidate(context,context.latest);state.liveLayout=p.layout;state.selected=null;renderCanvas();updateMetrics();drawChart();
+    };
+    let result;
+    if(auto){
+      // WASM takes a finite budget. Start further rounds without a global cap,
+      // keeping the best verified layout across worker lifetimes.
+      for(let round=0;token===state.runToken;round++){
+        try{result=await state.engine.run(state.library,request,{...options,seconds:60,seed:(options.seed+round)>>>0,live:0.1,onProgress});}
+        catch(error){if(token!==state.runToken)return;await context.validationTask;if(token!==state.runToken)return;if(!auto.best)throw error;}
+        if(token!==state.runToken)return;
+        if(result?.layout.placements.length)auto.consider({layout:result.layout,validation:result.validation,iteration:state.iteration},performance.now());
+        if(!auto.best)throw new Error('Не удалось разместить детали. Увеличьте лист или уменьшите отступы.');
+        result=null;
+      }
+      return;
+    }
+    result=await state.engine.run(state.library,request,{...options,seconds,live:0.1,onProgress});
     if(token!==state.runToken)return;clearInterval(progressTimer);context.closed=true;context.pending=null;activeRun=null;
     if(!result.layout?.placements?.length)throw new Error('Не удалось разместить детали. Увеличьте лист или уменьшите отступы.');
     result.studio_iterations=state.iteration;result.studio_elapsed=(performance.now()-start)/1000;
@@ -393,7 +441,7 @@ function newProjectDialog(){
     const projects=readSavedProjects();if(!projects)return;
     if(projects.some(p=>managementNameKey(p.name)===managementNameKey(name))){managementError('Проект с таким названием уже существует.');return;}
     state.projectName=name;state.projectId=null;state.projectExplicitName=true;state.importNames=[];state.library=emptyLibrary();state.chosenParts.clear();state.quantities={};state.result=null;state.request=null;state.selected=null;state.tab=0;state.dirty=false;state.history=[];state.zoom=1;state.paintWarnings=[];previewLayout=emptyLayout();state.liveLayout=null;state.liveRequest=null;
-    $('sheet-width').value=600;$('sheet-height').value=400;$('spacing').value=3;$('margin').value=5;settings.syncTime();settings.restoreSelection(null);renderParts();renderCanvas();updateMetrics();drawChart();$('app-dialog').close();toast(`Проект «${name}» создан. Загрузите SVG или DXF.`);
+    settings.reset();renderParts();renderCanvas();updateMetrics();drawChart();$('app-dialog').close();toast(`Проект «${name}» создан. Загрузите SVG или DXF.`);
   };
 }
 $('new-project').onclick=newProjectDialog;

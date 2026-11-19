@@ -14,12 +14,11 @@ export function setupPresetUI({ root, ids, node, capture, apply, validate, locke
   try { storage = globalThis.localStorage; }
   catch { storage = { getItem() { throw new Error('Storage unavailable'); } }; }
   const store = createPresetStore({ defaults, schema, storage });
-  let selectedId = store.selectedId || null;
-  if (!selectedId && store.items.length === 4 && store.items.every(item => item.builtin)) {
-    selectedId = store.items.find(item => ids.every(id => String(item.settings[id]) === String(defaults[id])))?.id || null;
-  }
+  const defaultId = () => store.items.find(item => item.builtin && ids.every(id => item.settings[id] === defaults[id]))?.id || null;
+  let selectedId = store.selectedId || defaultId();
   let baseline = store.items.find(item => item.id === selectedId)?.settings || { ...defaults };
-  const section = node('section', { class: 'parameter-preset settings-section', id: 'parameter-preset', 'aria-label': 'Сохранённые параметры' });
+  const inset = node('div', { class: 'parameter-preset-section settings-section' });
+  const section = node('section', { class: 'parameter-preset', id: 'parameter-preset', 'aria-label': 'Сохранённые параметры' });
   const open = $('material-presets');
   open.className = 'parameter-preset-open';
   open.setAttribute('type', 'button');
@@ -29,7 +28,7 @@ export function setupPresetUI({ root, ids, node, capture, apply, validate, locke
   open.replaceChildren(caption, name);
   const save = node('button', { id: 'save-parameter-preset', type: 'button', class: 'icon-button parameter-preset-save', title: 'Сохранить изменения', 'aria-label': 'Сохранить изменения' });
   save.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>';
-  section.append(open, save); root.prepend(section);
+  section.append(open, save); inset.append(section); root.prepend(inset);
   const nav = document.querySelector('[data-nav="materials"] > span:last-child');
   if (nav) nav.textContent = 'Сохранённые параметры';
   const style = node('link', { rel: 'stylesheet', href: new URL('./parameter-presets.css', import.meta.url).href });
@@ -187,5 +186,5 @@ export function setupPresetUI({ root, ids, node, capture, apply, validate, locke
   }
   refresh();
   return { openPresets, refresh, normalize: store.normalize, captureSelection: () => ({ selectedId, baseline: { ...baseline } }), restoreSelection,
-    restorePresetSelection: id => restoreSelection(id) };
+    restorePresetSelection: id => restoreSelection(id), restoreDefaultSelection: () => restoreSelection(defaultId()) };
 }

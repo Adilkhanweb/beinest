@@ -1,5 +1,6 @@
 /* Saved parameters use the existing management card vocabulary, without a second sidebar form. */
-.parameter-preset.settings-section { display:flex; align-items:center; gap:8px; padding:10px 0 12px; min-width:0; }
+.parameter-preset-section.settings-section { padding-block:12px 0; border-bottom:0; }
+.parameter-preset { display:flex; align-items:center; gap:8px; min-width:0; }
 .parameter-preset-open { appearance:none; display:flex; flex:1; min-width:0; flex-direction:column; align-items:flex-start; gap:3px; padding:0; border:0; background:none; color:inherit; text-align:left; cursor:pointer; }
 .parameter-preset-caption { color:var(--muted,#7a8290); font-size:11px; line-height:15px; }
 .parameter-preset-name { display:block; width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; line-height:18px; font-weight:600; }

@@ -2,7 +2,7 @@
  * Request shapes verified against assets/vendor/web-src-{app,types,worker}.
  */
 import { setupPresetUI } from './parameter-presets-ui.js';
-const BASE_IDS = ['sheet-width', 'sheet-height', 'spacing', 'margin', 'rotation', 'allow-holes', 'time-budget'];
+const BASE_IDS = ['sheet-width', 'sheet-height', 'spacing', 'margin', 'rotation', 'allow-holes', 'time-unlimited', 'time-budget'];
 const EXTRA_IDS = ['edge-unlinked', 'edge-spacing', 'sheet-count', 'nest-mode', 'allow-mirror',
   'common-line-enabled', 'common-line-kerf', 'common-line-search-bonus', 'lead-in-enabled',
   'lead-in-kerf', 'lead-in-length', 'lead-in-style', 'lead-in-outer-angle', 'lead-in-hole-angle',
@@ -86,14 +86,15 @@ export function setupSettings({ onDirty = () => {}, isRunning = () => false } = 
   $('margin').title = 'Одинаковые поля со всех четырёх сторон листа. Это не зазор между деталями.';
   $('spacing').step = 'any';
   $('rotation').append(node('option', { value: '15' }, 'С шагом 15°'), node('option', { value: 'free' }, 'Свободный поворот'));
+  $('rotation').value = '15';
   field(extendedGeometry, 'sheet-count', 'Доступно листов', { value: 0, max: 100000, step: 1 });
   hint(extendedGeometry, '0 — количество листов не ограничено.');
   field(extendedGeometry, 'nest-mode', 'Цель раскроя', { value: 'all', options: [
     ['all', 'Разместить все детали'], ['fill_area', 'Заполнить по площади']
   ] });
   hint(extendedGeometry, 'В режиме заполнения часть деталей может остаться неразмещённой.');
-  toggle(extendedGeometry, 'edge-unlinked', 'Отдельный зазор до границы', 'По умолчанию равен зазору между деталями');
-  field(extendedGeometry, 'edge-spacing', 'Зазор до границы рабочего поля', { value: $('spacing').value, max: 1000, unit: 'мм' });
+  toggle(extendedGeometry, 'edge-unlinked', 'Отдельный зазор до границы', 'Если выключен, равен зазору между деталями', true);
+  field(extendedGeometry, 'edge-spacing', 'Зазор до границы рабочего поля', { value: 0, max: 1000, unit: 'мм' });
   hint(extendedGeometry, 'Поля листа задаются выше отдельно. Зазор до границы рабочего поля не заменяет поля.');
   toggle(extendedGeometry, 'allow-mirror', 'Разрешить зеркальное отражение', 'Для всех деталей; отключите для лицевых материалов');
   // This worker has no allow_holes request flag: nesting inside holes is automatic.
@@ -145,9 +146,11 @@ export function setupSettings({ onDirty = () => {}, isRunning = () => false } = 
   slider.max = '300';
   slider.step = '1';
   const timeSection = slider.closest('.settings-section');
+  const unlimited = toggle(timeSection, 'time-unlimited', 'Без ограничения времени', 'Остановка после 15 секунд без улучшений проверенной раскладки.', true);
+  timeSection.querySelector('.section-heading')?.after(unlimited.parentElement);
   const timeHint = timeSection.querySelector('.smart-tip p') || node('p', { class: 'settings-hint' });
   timeHint.id = 'settings-time-hint';
-  timeHint.textContent = 'Время поиска — от 1 до 300 секунд. Больше времени — больше вариантов. Начните с 10 секунд.';
+  timeHint.textContent = 'Лимит поиска — от 1 до 300 секунд.';
   if (!timeHint.parentElement) timeSection.append(timeHint);
   // The old app handler redraws chart history. Time editing must never do that.
   slider.oninput = null;
@@ -191,6 +194,7 @@ export function setupSettings({ onDirty = () => {}, isRunning = () => false } = 
     if (parsed !== null) syncTime(parsed);
   });
   syncTime();
+  unlimited.addEventListener('change', () => { if (!locked()) { if (unlimited.checked) syncTime(seconds); updateDependencies(); } });
 
   function capture() {
     const result = {};
@@ -208,6 +212,8 @@ export function setupSettings({ onDirty = () => {}, isRunning = () => false } = 
     commonFields.hidden = !common;
     leadFields.hidden = !lead;
     for (const el of root.querySelectorAll('input,select,button')) el.disabled = locked();
+    slider.disabled = timeInput.disabled = locked() || unlimited.checked;
+    timeHint.parentElement.hidden = unlimited.checked;
     $('allow-holes').disabled = true;
     $('spacing').disabled = locked() || common;
     $('edge-spacing').disabled = locked() || !checked('edge-unlinked');
@@ -219,7 +225,11 @@ export function setupSettings({ onDirty = () => {}, isRunning = () => false } = 
   }
   function apply(data) {
     if (locked() || !data || typeof data !== 'object') return false;
-    if (presetUI) { try { data = presetUI.normalize({ ...capture(), ...(data.values || data) }); } catch { return false; } }
+    if (presetUI) { try {
+      const incoming = data.values || data;
+      const legacyTime = Object.hasOwn(incoming, 'time-budget') && !Object.hasOwn(incoming, 'time-unlimited');
+      data = presetUI.normalize({ ...capture(), ...(legacyTime ? { 'time-unlimited': false } : {}), ...incoming });
+    } catch { return false; } }
     const before = capture();
     const values = data.values && typeof data.values === 'object' ? data.values : data;
     for (const id of ids) {
@@ -251,7 +261,7 @@ export function setupSettings({ onDirty = () => {}, isRunning = () => false } = 
     };
     return request;
   }
-  function runOptions() { return { seconds: getSeconds(), seed: number('run-seed'), repeatable: checked('run-repeatable') }; }
+  function runOptions() { return { seconds: getSeconds(), unlimited: unlimited.checked, seed: number('run-seed'), repeatable: checked('run-repeatable') }; }
   function getSeconds() { return parseTime(timeInput.value) ?? seconds; }
   function importOptions() {
     const options = {};
@@ -297,9 +307,12 @@ export function setupSettings({ onDirty = () => {}, isRunning = () => false } = 
   }
   $('spacing').addEventListener('input', () => { if (!locked()) updateDependencies(); });
 
+  const defaults = capture();
   presetUI = setupPresetUI({ root, ids, node, capture, apply, validate, locked, onDirty });
+  updateDependencies();
   const { openPresets, captureSelection, restoreSelection, restorePresetSelection } = presetUI;
   const api = { capture, apply, openPresets, captureSelection, restoreSelection, restorePresetSelection, requestExtras, runOptions, setDisabled, getSeconds, syncTime, validate, importOptions,
+    reset: () => { apply(defaults); presetUI.restoreDefaultSelection(); },
     sheetCount: () => number('sheet-count') === 0 ? null : number('sheet-count'), mirror: () => checked('allow-mirror') };
   root.nestboltSettings = api;
   return api;

@@ -12,8 +12,8 @@ export function normalizeSettings(source, defaults, schema, complete = true) {
   if (Object.keys(values).some(key => !(key in schema))) throw new Error('Unknown setting');
   const result = {};
   for (const [key, rule] of Object.entries(schema)) {
-    if (!Object.hasOwn(values, key) && complete) throw new Error(`Missing ${key}`);
-    const value = Object.hasOwn(values, key) ? values[key] : defaults[key];
+    if (!Object.hasOwn(values, key) && complete && key !== 'time-unlimited') throw new Error(`Missing ${key}`);
+    const value = Object.hasOwn(values, key) ? values[key] : key === 'time-unlimited' ? false : defaults[key];
     if (rule.type === 'checkbox') {
       if (typeof value !== 'boolean') throw new Error(`Invalid ${key}`);
       result[key] = value;
@@ -81,7 +81,7 @@ export function createPresetStore({ defaults, schema, storage = globalThis.local
       }
       // An explicitly empty historical library represents a deletion, never a seed request.
       if (oldSheets === null && oldParameters === null) {
-        for (const [id, name, w, h] of [['0', 'Компактный', 300, 200], ['1', 'Стандартный', 600, 400], ['2', 'Средний', 900, 600], ['3', 'Полный лист', 1220, 2440]]) append({ id, name, builtin: true, settings: normalize({ ...defaults, 'sheet-width': w, 'sheet-height': h }) });
+        for (const [id, name, w, h] of [['0', 'Компактный', 300, 200], ['1', 'Стандартный', 600, 400], ['2', 'Средний', 900, 600], ['3', 'Полный лист', defaults['sheet-width'], defaults['sheet-height']]]) append({ id, name, builtin: true, settings: normalize({ ...defaults, 'sheet-width': w, 'sheet-height': h }) });
       }
       write({ version: 2, items: validateItems(items), selectedId: null });
     }
