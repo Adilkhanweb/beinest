@@ -2,6 +2,8 @@
 
 Локальное рабочее пространство для 2D irregular shape nesting на базе Nestbolt. Графитовая навигация, оранжевый акцент, локальный Noto Sans с казахскими символами, светлая и тёмная темы. Интерфейс на русском, английском и казахском; язык и тема сохраняются локально.
 
+[Открыть beinest](https://adilkhanweb.github.io/beinest/) · [CI/CD](https://github.com/Adilkhanweb/beinest/actions/workflows/pages.yml)
+
 ## Запуск
 
 Нужен Node.js 22 или новее. Для самого сайта установка пакетов не требуется:
